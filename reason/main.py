@@ -10,9 +10,6 @@ from preprocess.prepare_data import get_data
 from preprocess.prepare_prompts import get_prompts_for_data
 from llm_utils import llm_init, llm_inf_all
 
-from metrics.evaluate_results_corrected import eval_results as eval_results_corrected
-from metrics.evaluate_results import eval_results as eval_results_original
-
 
 def get_defined_prompts(prompt_mode, model_name, llm_mode):
     if 'gpt' in model_name or 'gpt' in prompt_mode:
@@ -35,6 +32,7 @@ def get_defined_prompts(prompt_mode, model_name, llm_mode):
 
 def save_checkpoint(file_handle, data):
     file_handle.write(json.dumps(data) + "\n")
+    file_handle.flush()          # 每条写完立即刷盘，防止中断丢数据
 
 
 def load_checkpoint(file_path):
@@ -47,44 +45,10 @@ def load_checkpoint(file_path):
             print(f"Last processed item: {ckpt[-1]['id']}")
         except IndexError:
             pass
+        print(f"Already completed: {len(ckpt)} items")
         print("*" * 50)
         return ckpt
     return []
-
-
-def eval_all(pred_file_path, run, subset, split=None, eval_hops=-1):
-
-    print("=" * 50)
-    print("=" * 50)
-    print(f"Evaluating on subset: {subset}")
-
-    print("Results:")
-    hit1, f1, prec, recall, em, tw, mi_f1, mi_prec, mi_recall, total_cnt, no_ans_cnt, no_ans_ratio, hal_score, stats = eval_results_corrected(str(pred_file_path), cal_f1=True, subset=subset, split=split, eval_hops=eval_hops)
-    if subset:
-        postfix = "_sub"
-    else:
-        postfix = ""
-    run.log({f"results{postfix}/hit@1": hit1,
-             f"results{postfix}/macro_f1": f1,
-             f"results{postfix}/macro_precision": prec,
-             f"results{postfix}/macro_recall": recall,
-             f"results{postfix}/exact_match": em,
-             f"results{postfix}/totally_wrong": tw,
-             f"results{postfix}/micro_f1": mi_f1,
-             f"results{postfix}/micro_precision": mi_prec,
-             f"results{postfix}/micro_recall": mi_recall,
-             f"results{postfix}/total_cnt": total_cnt,
-             f"results{postfix}/no_ans_cnt": no_ans_cnt,
-             f"results{postfix}/no_ans_ratio": no_ans_ratio,
-             f"results{postfix}/hal_score": hal_score})  # score_h in the paper
-    if stats is not None:
-        for k, v in stats.items():
-            run.log({f"stats{postfix}/{k}": v})
-
-    hit, _, _, _ = eval_results_original(str(pred_file_path), cal_f1=True, subset=subset, eval_hops=eval_hops)
-    run.log({f"results{postfix}/hit": hit})
-    print("=" * 50)
-    print("=" * 50)
 
 
 def main():
@@ -94,7 +58,6 @@ def main():
     parser.add_argument("-p", "--score_dict_path", type=str)
     parser.add_argument("--llm_mode", type=str, default="sys_icl_dc", help="LLM mode")
     parser.add_argument("-m", "--model_name", type=str, default="meta-llama/Meta-Llama-3.1-8B-Instruct", help="Model name")
-    # parser.add_argument("--model_name", type=str, default="gpt-4o", help="Model name")
     parser.add_argument("--split", type=str, default="test", help="Split")
     parser.add_argument("--tensor_parallel_size", type=int, default=1, help="Tensor parallel size")
     parser.add_argument("--max_seq_len_to_capture", type=int, default=8192 * 2, help="Max sequence length to capture")
@@ -103,6 +66,13 @@ def main():
     parser.add_argument("--temperature", type=float, default=0, help="Temperature")
     parser.add_argument("--frequency_penalty", type=float, default=0.16, help="Frequency penalty")
     parser.add_argument("--thres", type=float, default=0.0, help="Threshold")
+
+    # ==================== 新增参数 ====================
+    parser.add_argument("--pilot", type=int, default=0,
+                        help="Pilot 模式：只跑前 N 条。设为 0 表示跑全量（默认）")
+    parser.add_argument("--no_wandb", action="store_true",
+                        help="禁用 wandb，本地调试时使用")
+    # ==================================================
 
     args = parser.parse_args()
     dataset_name = args.dataset_name
@@ -120,7 +90,13 @@ def main():
 
     pred_file_path = f"./results/KGQA/{dataset_name}/RoG/{split}/results_gen_rule_path_RoG-{dataset_name}_RoG_{split}_predictions_3_False_jsonl/predictions.jsonl"
     run_name = f"{model_name}-{prompt_mode}-{llm_mode}-{frequency_penalty}-thres_{thres}-{split}"
-    run = wandb.init(project=f"RAG-{dataset_name}", name=run_name, config=args)
+
+    # ==================== wandb 开关 ====================
+    if args.no_wandb:
+        run = wandb.init(mode="disabled")
+    else:
+        run = wandb.init(project=f"RAG-{dataset_name}", name=run_name, config=args)
+    # ====================================================
 
     if args.score_dict_path is None:
         if dataset_name == "webqsp":
@@ -139,25 +115,51 @@ def main():
     llm = llm_init(model_name, tensor_parallel_size, max_seq_len_to_capture, max_tokens, seed, temperature, frequency_penalty)
     data = get_data(dataset_name, pred_file_path, score_dict_path, split, prompt_mode)
     sys_prompt, cot_prompt = get_defined_prompts(prompt_mode, model_name, llm_mode)
+
     print("Generating prompts...")
     data = get_prompts_for_data(data, prompt_mode, sys_prompt, cot_prompt, thres)
 
+    # ==================== pilot 控制 ====================
+    if args.pilot > 0:
+        data = data[:args.pilot]
+        print(f"[PILOT MODE] 只跑前 {args.pilot} 条")
+    else:
+        print(f"[FULL MODE] 跑全量 {len(data)} 条")
+    # ====================================================
+
     print("Starting inference...")
     start_idx = len(load_checkpoint(raw_pred_file_path))
-    with open(raw_pred_file_path, "a") as pred_file:
-        for idx, each_qa in enumerate(tqdm(data[start_idx:], initial=start_idx, total=len(data))):
-            res = llm_inf_all(llm, each_qa, llm_mode, model_name)
 
-            del each_qa["graph"], each_qa["good_paths_rog"], each_qa["good_triplets_rog"], each_qa["scored_triplets"]
+    if start_idx >= len(data):
+        print(f"All {len(data)} items already completed, skipping inference.")
+    else:
+        with open(raw_pred_file_path, "a") as pred_file:
+            for idx, each_qa in enumerate(tqdm(data[start_idx:], initial=start_idx, total=len(data))):
+                res = llm_inf_all(llm, each_qa, llm_mode, model_name)
 
-            each_qa["prediction"] = res[0]
-            save_checkpoint(pred_file, each_qa)
+                del each_qa["graph"], each_qa["good_paths_rog"], each_qa["good_triplets_rog"], each_qa["scored_triplets"]
 
-    # If the processing completes, rename the files to remove the "resume" flag
-    final_pred_file_path = raw_pred_file_path.with_name(raw_pred_file_path.stem.replace("-resume", "") + raw_pred_file_path.suffix)
-    os.rename(raw_pred_file_path, final_pred_file_path)
-    eval_all(final_pred_file_path, run, subset=True)
-    eval_all(final_pred_file_path, run, subset=False)
+                each_qa["prediction"] = res[0]
+                save_checkpoint(pred_file, each_qa)
+
+    final_pred_file_path = raw_pred_file_path.with_name(
+        raw_pred_file_path.stem.replace("-resume", "") + raw_pred_file_path.suffix
+    )
+
+    if raw_pred_file_path.exists():
+        if final_pred_file_path.exists():
+            final_pred_file_path.unlink()   # 避免 rename 冲突
+        os.rename(raw_pred_file_path, final_pred_file_path)
+
+    print("=" * 50)
+    print(f"Predictions saved to: {final_pred_file_path}")
+    print(f"Total samples: {len(data)}")
+    print("=" * 50)
+    print(f"接下来请用 eval_standalone.py 评测：")
+    print(f"  python eval_standalone.py --pred_file {final_pred_file_path}")
+    print("=" * 50)
+
+    run.finish()
 
 
 if __name__ == "__main__":
