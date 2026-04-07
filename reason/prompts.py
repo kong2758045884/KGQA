@@ -84,11 +84,21 @@ icl_sys_prompt = (
 # )
 
 icl_cot_prompt = (
-    "Let's think step by step."
-    ' Return the most possible answers based on the given triplets by listing each answer on a separate line, starting with the prefix "ans:".'
-    ' Use the entity names exactly as they appear in the triplets whenever possible.'
-    ' If the triplets mention relevant entities but do not state the answer explicitly, return the most likely answer supported by the triplets.'
-    ' Only return "ans: not available" if the triplets provide no relevant entities or relations for answering the question.'
+    "Let's think step by step.\n"
+    'List each answer on a separate line, starting with the prefix "ans:".\n'
+    "Use entity names exactly as they appear in the triplets.\n"
+    "If the triplets mention relevant entities but do not directly state the answer, "
+    "infer the most likely answer supported by the triplets and your knowledge.\n"
+    "You must always provide at least one answer. Do not refuse to answer."
+)
+
+# Stronger fallback prompt used when DC second-round is triggered
+dc_fallback_prompt = (
+    "Please look at the triplets again carefully and provide your best answer.\n"
+    'List each answer on a separate line with the prefix "ans:".\n'
+    "Even if you are not fully certain, provide the most likely answer "
+    "based on the available triplets and your knowledge.\n"
+    "Do not say the information is unavailable or unknown."
 )
 
 icl_cot_prompt_post = (
@@ -145,21 +155,20 @@ icl_user_prompt = """Triplets:
 Question:
 What year did the team with mascot named Lou Seal win the World Series?"""
 
-icl_ass_prompt = """To find the year the team with mascot named Lou Seal won the World Series, we need to find the team with mascot named Lou Seal and then find the year they won the World Series.
+icl_ass_prompt = """To find the year the team with mascot named Lou Seal won the World Series, I need to:
+1. Identify the team with mascot Lou Seal
+2. Find which World Series they won
 
-From the triplets, we can see that Lou Seal is the mascot of the San Francisco Giants.
+From the triplets: (Lou Seal, sports.mascot.team, San Francisco Giants) — so the team is San Francisco Giants.
 
-Now, we need to find the year the San Francisco Giants won the World Series.
+The triplets show San Francisco Giants won:
+- (San Francisco Giants, sports.sports_team.championships, 2010 World Series)
+- (San Francisco Giants, sports.sports_team.championships, 2012 World Series)
+- (San Francisco Giants, sports.sports_team.championships, 2014 World Series)
 
-From the triplets, we can see that San Francisco Giants won the 2010 World Series and 2012 World Series and 2014 World Series.
-
-So, the team with mascot named Lou Seal (San Francisco Giants) won the World Series in 2010, 2012, and 2014.
-
-Therefore, the formatted answers are:
-
-ans: 2014 World Series
+ans: 2010 World Series
 ans: 2012 World Series
-ans: 2010 World Series"""
+ans: 2014 World Series"""
 
 
 noevi_sys_prompt = (

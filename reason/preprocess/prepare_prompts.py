@@ -82,10 +82,25 @@ def get_prompts(each_qa, mode, sys_prompt, cot_prompt, thres, seed=0):
 
         input_triplets = unique_preserve_order(input_triplets)
         input_triplets = input_triplets[:num_sampled_triplets]
-        input_triplets = [triplet_to_str(triplet) for triplet in input_triplets]
-        if 'rev' in mode:
-            input_triplets.reverse()
-        triplet_prompt = "Triplets:\n" + "\n".join(input_triplets)
+
+        if 'struct' in mode:
+            # Prefix-preserving structured evidence: keep scorer order,
+            # group consecutive triplets sharing the same subject entity,
+            # add blank line between groups for visual clarity.
+            lines = []
+            prev_subject = None
+            for t in input_triplets:
+                if t[0] != prev_subject:
+                    if prev_subject is not None:
+                        lines.append("")  # visual separator between entity groups
+                    prev_subject = t[0]
+                lines.append(triplet_to_str(t))
+            triplet_prompt = "Triplets:\n" + "\n".join(lines)
+        else:
+            input_triplets = [triplet_to_str(triplet) for triplet in input_triplets]
+            if 'rev' in mode:
+                input_triplets.reverse()
+            triplet_prompt = "Triplets:\n" + "\n".join(input_triplets)
 
     elif 'rand' in mode:
         num_sampled_triplets = int(mode.split('_')[1])

@@ -116,8 +116,16 @@ def main():
     data = get_data(dataset_name, pred_file_path, score_dict_path, split, prompt_mode)
     sys_prompt, cot_prompt = get_defined_prompts(prompt_mode, model_name, llm_mode)
 
+    # Inject dc_fallback_prompt for DC mode
+    from prompts import dc_fallback_prompt
+
     print("Generating prompts...")
     data = get_prompts_for_data(data, prompt_mode, sys_prompt, cot_prompt, thres)
+
+    # Attach dc_fallback_prompt to each sample for DC fallback use
+    if 'dc' in llm_mode:
+        for each_qa in data:
+            each_qa['dc_query'] = dc_fallback_prompt
 
     # ==================== pilot 控制 ====================
     if args.pilot > 0:
@@ -155,8 +163,10 @@ def main():
     print(f"Predictions saved to: {final_pred_file_path}")
     print(f"Total samples: {len(data)}")
     print("=" * 50)
-    print(f"接下来请用 eval_standalone.py 评测：")
-    print(f"  python eval_standalone.py --pred_file {final_pred_file_path}")
+    print(f"Evaluate with:")
+    print(f"  python eval_standalone.py --pred_file {final_pred_file_path} --eval_mode strict")
+    print(f"  python eval_standalone.py --pred_file {final_pred_file_path} --eval_mode paper")
+    print(f"  python eval_standalone.py --pred_file {final_pred_file_path} --eval_mode all --breakdown")
     print("=" * 50)
 
     run.finish()
