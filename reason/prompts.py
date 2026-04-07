@@ -84,20 +84,11 @@ icl_sys_prompt = (
 # )
 
 icl_cot_prompt = (
-    # "If no answer is found, please provide an answer according to your common sense. "
-    # "Please keep the answer as simple as possible."
-    #  'Format your answers by listing each answer on a separate line, starting with the prefix "ans:".'
-    #  " Use the entity names as they appear in the knowledge graph as your answers."
-    #  f" Again, the question is: {prompts['question']}"
-    # 'If there is no sufficient information to answer the question, return "ans: not available".'
     "Let's think step by step."
     ' Return the most possible answers based on the given triplets by listing each answer on a separate line, starting with the prefix "ans:".'
-        # 'Format your above answers by listing each answer on a separate line, starting with the prefix "ans:".'
-    ' Otherwise, if there is no sufficient information to answer the question, return "ans: not available".'
-
-#    'If there is no sufficient information to answer the question, return "ans: not available".'
-#    'Otherwise, return the most possible answers, each prefixed with "ans:".'
-
+    ' Use the entity names exactly as they appear in the triplets whenever possible.'
+    ' If the triplets mention relevant entities but do not state the answer explicitly, return the most likely answer supported by the triplets.'
+    ' Only return "ans: not available" if the triplets provide no relevant entities or relations for answering the question.'
 )
 
 icl_cot_prompt_post = (
@@ -166,9 +157,9 @@ So, the team with mascot named Lou Seal (San Francisco Giants) won the World Ser
 
 Therefore, the formatted answers are:
 
-ans: 2014 (2014 World Series)
-ans: 2012 (2012 World Series)
-ans: 2010 (2010 World Series)"""
+ans: 2014 World Series
+ans: 2012 World Series
+ans: 2010 World Series"""
 
 
 noevi_sys_prompt = (
