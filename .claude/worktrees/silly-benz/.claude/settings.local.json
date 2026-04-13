@@ -1,0 +1,37 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//wsl.localhost/Ubuntu-24.04/home/kkg/code/SubgraphRAG/.claude/**)",
+      "Read(//c/code/**)",
+      "Read(///wsl.localhost/Ubuntu-24.04/home/kkg/code/SubgraphRAG/reason/**)",
+      "Read(///wsl.localhost/Ubuntu-24.04/home/kkg/code/SubgraphRAG/**)",
+      "Read(///wsl.localhost/Ubuntu-24.04/home/kkg/code/**)",
+      "Read(///wsl.localhost/Ubuntu-24.04/home/kkg/code/SubgraphRAG/.claude/worktrees/silly-benz/**)",
+      "Bash(python -c \":*)",
+      "Bash(wsl -- ls -la /home/kkg/code/SubgraphRAG/reason/scored_triples/)",
+      "Bash(wsl -- ls -la /home/kkg/code/SubgraphRAG/scored_triples/)",
+      "Bash(wsl -- find /home/kkg/code/SubgraphRAG -name \"*.pth\" -path \"*scored*\")",
+      "Bash(wsl -d Ubuntu-24.04 -- bash -c \"ls -la /home/kkg/code/SubgraphRAG/scored_triples/ 2>/dev/null && echo ''==='' && ls -la /home/kkg/code/SubgraphRAG/reason/scored_triples/ 2>/dev/null && echo ''==='' && find /home/kkg/code/SubgraphRAG -name ''*.pth'' 2>/dev/null | head -10\")",
+      "Bash(wsl -d Ubuntu-24.04 -- bash -c \"ls -la /home/kkg/code/SubgraphRAG/reason/results/ 2>/dev/null && echo ''==='' && find /home/kkg/code/SubgraphRAG/reason/results -name ''*.jsonl'' 2>/dev/null | head -20 && echo ''==='' && find /home/kkg/code/SubgraphRAG/results -type f 2>/dev/null | head -20\")",
+      "Bash(wsl -d Ubuntu-24.04 -- bash -c 'ls -d /home/kkg/code/SubgraphRAG/.claude/worktrees/silly-benz/ 2>/dev/null && echo EXISTS || echo NOTFOUND')",
+      "Bash(wsl -d Ubuntu-24.04 -- bash -c ':*)",
+      "Bash(wsl -d Ubuntu-24.04 -- bash /home/kkg/code/SubgraphRAG/.claude/worktrees/silly-benz/dev/setup_worktree.sh)",
+      "Bash(wsl -d Ubuntu-24.04 -- bash //home/kkg/code/SubgraphRAG/.claude/worktrees/silly-benz/dev/setup_worktree.sh)",
+      "Bash(wsl -d Ubuntu-24.04 -- bash //home/kkg/code/SubgraphRAG/.claude/worktrees/silly-benz/dev/run_pilot50.sh)",
+      "Bash(wsl -d Ubuntu-24.04 -- bash -c 'ls -la /home/kkg/code/SubgraphRAG/.claude/worktrees/silly-benz/results/KGQA/cwq/RoG/test/results_gen_rule_path_RoG-cwq_RoG_test_predictions_3_False_jsonl/ 2>/dev/null && echo OK || echo FAIL')",
+      "Bash(wsl -d Ubuntu-24.04 -- bash //home/kkg/code/SubgraphRAG/.claude/worktrees/silly-benz/dev/eval_baseline_paper.sh)",
+      "Bash(wsl -d Ubuntu-24.04 -- bash -c 'find /home/kkg/code/SubgraphRAG -name \"\"*predictions*\"\" -name \"\"*.jsonl\"\" 2>/dev/null | while read f; do echo \"\"$\\(wc -l < \"\"$f\"\"\\) $f\"\"; done | sort -rn')",
+      "Bash(wsl -d Ubuntu-24.04 -- find /home/kkg/code/SubgraphRAG -name \"*prediction*\" -name \"*.jsonl\" -exec wc -l {} +)",
+      "Bash(wsl -d Ubuntu-24.04 -- bash //home/kkg/code/SubgraphRAG/.claude/worktrees/silly-benz/dev/find_preds.sh)",
+      "Bash(wsl -d Ubuntu-24.04 -- cat /home/kkg/code/SubgraphRAG/results/KGQA/cwq/SubgraphRAG/qwen-plus/scored_100-sys_icl_dc-0.16-thres_0.0-test-predictions_eval_results.json)",
+      "Bash(wsl -d Ubuntu-24.04 -- bash //home/kkg/code/SubgraphRAG/.claude/worktrees/silly-benz/dev/check_status.sh)",
+      "Bash(wsl -d Ubuntu-24.04 -- bash -c 'cat /home/kkg/code/SubgraphRAG/results/KGQA/cwq/SubgraphRAG/qwen-plus/scored_100_reorg-sys_icl_dc-0.16-thres_0.0-test-predictions_eval_results_all.json')",
+      "Bash(wsl -d Ubuntu-24.04 -- wc -l /home/kkg/code/SubgraphRAG/.claude/worktrees/silly-benz/reason/results/KGQA/cwq/SubgraphRAG/qwen-plus/scored_100-sys_icl_dc-0.16-thres_0.0-test-predictions-resume.jsonl)",
+      "Bash(wsl -d Ubuntu-24.04 -- bash //home/kkg/code/SubgraphRAG/.claude/worktrees/silly-benz/dev/check_round3.sh)",
+      "Bash(wsl -d Ubuntu-24.04 -- cat /home/kkg/code/SubgraphRAG/.claude/worktrees/silly-benz/reason/results/KGQA/cwq/SubgraphRAG/qwen-plus/scored_100-sys_icl_dc-0.16-thres_0.0-test-predictions_eval_results_all.json)",
+      "Bash(wsl -d Ubuntu-24.04 -- bash //home/kkg/code/SubgraphRAG/.claude/worktrees/silly-benz/dev/cleanup_and_rerun.sh)",
+      "Bash(git checkout:*)",
+      "Bash(wsl -d Ubuntu-24.04 -- bash //home/kkg/code/SubgraphRAG/.claude/worktrees/silly-benz/dev/run_pilot250.sh)"
+    ]
+  }
+}

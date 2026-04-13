@@ -72,6 +72,8 @@ def main():
                         help="Pilot 模式：只跑前 N 条。设为 0 表示跑全量（默认）")
     parser.add_argument("--no_wandb", action="store_true",
                         help="禁用 wandb，本地调试时使用")
+    parser.add_argument("--run_tag", type=str, default="",
+                        help="实验标签，用于区分不同实验的输出文件，例如 baseline_full / improved_pilot250")
     # ==================================================
 
     args = parser.parse_args()
@@ -108,9 +110,12 @@ def main():
     else:
         score_dict_path = args.score_dict_path
 
+    run_tag = args.run_tag.strip()
+    tag_suffix = f"-{run_tag}" if run_tag else ""
+
     raw_pred_folder_path = Path(f"./results/KGQA/{dataset_name}/SubgraphRAG/{args.model_name.split('/')[-1]}")
     raw_pred_folder_path.mkdir(parents=True, exist_ok=True)
-    raw_pred_file_path = raw_pred_folder_path / f"{prompt_mode}-{llm_mode}-{frequency_penalty}-thres_{thres}-{split}-predictions-resume.jsonl"
+    raw_pred_file_path = raw_pred_folder_path / f"{prompt_mode}-{llm_mode}-{frequency_penalty}-thres_{thres}-{split}{tag_suffix}-predictions-resume.jsonl"
 
     llm = llm_init(model_name, tensor_parallel_size, max_seq_len_to_capture, max_tokens, seed, temperature, frequency_penalty)
     data = get_data(dataset_name, pred_file_path, score_dict_path, split, prompt_mode)
@@ -159,14 +164,20 @@ def main():
             final_pred_file_path.unlink()   # 避免 rename 冲突
         os.rename(raw_pred_file_path, final_pred_file_path)
 
+    pilot_label = f"pilot {args.pilot}" if args.pilot > 0 else "full"
+
     print("=" * 50)
-    print(f"Predictions saved to: {final_pred_file_path}")
-    print(f"Total samples: {len(data)}")
+    print(f"[RUN INFO]")
+    print(f"  run_tag:     {run_tag if run_tag else '<none>'}")
+    print(f"  mode:        {pilot_label}")
+    print(f"  dataset:     {dataset_name}")
+    print(f"  total:       {len(data)}")
+    print(f"  output:      {final_pred_file_path}")
     print("=" * 50)
     print(f"Evaluate with:")
-    print(f"  python eval_standalone.py --pred_file {final_pred_file_path} --eval_mode strict")
-    print(f"  python eval_standalone.py --pred_file {final_pred_file_path} --eval_mode paper")
-    print(f"  python eval_standalone.py --pred_file {final_pred_file_path} --eval_mode all --breakdown")
+    print(f"  python reason/eval_standalone.py --pred_file {final_pred_file_path} --eval_mode strict")
+    print(f"  python reason/eval_standalone.py --pred_file {final_pred_file_path} --eval_mode paper")
+    print(f"  python reason/eval_standalone.py --pred_file {final_pred_file_path} --eval_mode all --breakdown")
     print("=" * 50)
 
     run.finish()
