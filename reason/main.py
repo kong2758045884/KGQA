@@ -3,6 +3,7 @@ import json
 import wandb
 import random
 import argparse
+import openai
 from tqdm import tqdm
 from pathlib import Path
 
@@ -130,16 +131,35 @@ def main():
     print("Starting inference...")
     start_idx = len(load_checkpoint(raw_pred_file_path))
 
+    error_file_path = raw_pred_folder_path / f"{prompt_mode}-{llm_mode}-{frequency_penalty}-thres_{thres}-{split}-errors.jsonl"
+
     if start_idx >= len(data):
         print(f"All {len(data)} items already completed, skipping inference.")
     else:
-        with open(raw_pred_file_path, "a") as pred_file:
+        with open(raw_pred_file_path, "a") as pred_file, \
+             open(error_file_path, "a") as error_file:
             for idx, each_qa in enumerate(tqdm(data[start_idx:], initial=start_idx, total=len(data))):
-                res = llm_inf_all(llm, each_qa, llm_mode, model_name)
+                try:
+                    res = llm_inf_all(llm, each_qa, llm_mode, model_name)
+                    prediction = res[0]
+                except openai.BadRequestError as e:
+                    err_msg = str(e)
+                    if "data_inspection_failed" in err_msg or "inappropriate content" in err_msg:
+                        print(f"\n[SKIP] sample {each_qa.get('id', idx)}: {err_msg[:120]}")
+                        prediction = "ans: not available"
+                        error_file.write(json.dumps({
+                            "id": each_qa.get("id"),
+                            "question": each_qa.get("question", ""),
+                            "error_type": "data_inspection_failed",
+                            "error_message": err_msg,
+                        }) + "\n")
+                        error_file.flush()
+                    else:
+                        raise
 
                 del each_qa["graph"], each_qa["good_paths_rog"], each_qa["good_triplets_rog"], each_qa["scored_triplets"]
 
-                each_qa["prediction"] = res[0]
+                each_qa["prediction"] = prediction
                 save_checkpoint(pred_file, each_qa)
 
     final_pred_file_path = raw_pred_file_path.with_name(
