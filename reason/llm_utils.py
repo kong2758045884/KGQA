@@ -164,23 +164,35 @@ def get_outputs(outputs, model_name):
 #  Inference logic
 # ============================================================
 
-def llm_inf(llm, prompts, mode, model_name):
+def llm_inf(llm, prompts, mode, model_name,
+            disable_refusal_handling=False,
+            disable_postprocess=False,
+            disable_dc_fallback=False,
+            icl_ass_prompt_override=None):
+    # Ablation switches (default == current improved behavior):
+    #   disable_refusal_handling: skip refusal-specific trigger for DC fallback
+    #   disable_postprocess:      skip postprocess_output on LLM outputs
+    #   disable_dc_fallback:      skip the entire DC fallback second-round path
+    #   icl_ass_prompt_override:  if not None, replaces module-level icl_ass_prompt
+    #                             (used by --use_baseline_prompts)
     res = []
     conversation = []
     outputs = ""
+    ass_text = icl_ass_prompt_override if icl_ass_prompt_override is not None else icl_ass_prompt
 
     if "sys" in mode:
         conversation.append({"role": "system", "content": prompts["sys_query"]})
 
     if "icl" in mode:
         conversation.append({"role": "user", "content": icl_user_prompt})
-        conversation.append({"role": "assistant", "content": icl_ass_prompt})
+        conversation.append({"role": "assistant", "content": ass_text})
 
     if "sys" in mode:
         conversation.append({"role": "user", "content": prompts["user_query"]})
         outputs = get_outputs(llm(messages=conversation), model_name)
         # Post-process to recover format issues
-        outputs = postprocess_output(outputs)
+        if not disable_postprocess:
+            outputs = postprocess_output(outputs)
         res.append(outputs)
 
     if "sys_cot" in mode:
@@ -190,28 +202,33 @@ def llm_inf(llm, prompts, mode, model_name):
         conversation.append({"role": "assistant", "content": outputs})
         conversation.append({"role": "user", "content": prompts["cot_query"]})
         outputs = get_outputs(llm(messages=conversation), model_name)
-        outputs = postprocess_output(outputs)
+        if not disable_postprocess:
+            outputs = postprocess_output(outputs)
         res.append(outputs)
 
     elif "dc" in mode:
-        # DC fallback: trigger second round if first round has no valid answer
-        needs_fallback = (
-            len(res) == 0
-            or not has_valid_ans_lines(res[0])
-            or is_refusal(res[0])
-        )
+        if not disable_dc_fallback:
+            # DC fallback: trigger second round if first round has no valid answer.
+            # The refusal-specific trigger is gated separately so it can be ablated
+            # without breaking the empty/invalid-answer triggers.
+            needs_fallback = (
+                len(res) == 0
+                or not has_valid_ans_lines(res[0])
+                or ((not disable_refusal_handling) and is_refusal(res[0]))
+            )
 
-        if needs_fallback:
-            # Use the stronger dc_fallback_prompt instead of regular cot_query
-            fallback_prompt = prompts.get("dc_query", dc_fallback_prompt)
-            conversation.append({"role": "assistant", "content": outputs})
-            conversation.append({"role": "user", "content": fallback_prompt})
-            outputs = get_outputs(llm(messages=conversation), model_name)
-            outputs = postprocess_output(outputs)
-            if len(res) == 0:
-                res.append(outputs)
-            else:
-                res[0] = outputs
+            if needs_fallback:
+                # Use the stronger dc_fallback_prompt instead of regular cot_query
+                fallback_prompt = prompts.get("dc_query", dc_fallback_prompt)
+                conversation.append({"role": "assistant", "content": outputs})
+                conversation.append({"role": "user", "content": fallback_prompt})
+                outputs = get_outputs(llm(messages=conversation), model_name)
+                if not disable_postprocess:
+                    outputs = postprocess_output(outputs)
+                if len(res) == 0:
+                    res.append(outputs)
+                else:
+                    res[0] = outputs
         res.append("")
     else:
         res.append("")
@@ -219,11 +236,19 @@ def llm_inf(llm, prompts, mode, model_name):
     return res
 
 
-def llm_inf_with_retry(llm, each_qa, llm_mode, model_name, max_retries):
+def llm_inf_with_retry(llm, each_qa, llm_mode, model_name, max_retries,
+                       disable_refusal_handling=False,
+                       disable_postprocess=False,
+                       disable_dc_fallback=False,
+                       icl_ass_prompt_override=None):
     retries = 0
     while retries < max_retries:
         try:
-            return llm_inf(llm, each_qa, llm_mode, model_name)
+            return llm_inf(llm, each_qa, llm_mode, model_name,
+                           disable_refusal_handling=disable_refusal_handling,
+                           disable_postprocess=disable_postprocess,
+                           disable_dc_fallback=disable_dc_fallback,
+                           icl_ass_prompt_override=icl_ass_prompt_override)
         except openai.RateLimitError:
             wait_time = (2 ** retries) * 5
             print(f"Rate limit error encountered. Retrying in {wait_time} seconds...")
@@ -233,5 +258,13 @@ def llm_inf_with_retry(llm, each_qa, llm_mode, model_name, max_retries):
     raise Exception("Max retries exceeded. Please check your rate limits or try again later.")
 
 
-def llm_inf_all(llm, each_qa, llm_mode, model_name, max_retries=5):
-    return llm_inf_with_retry(llm, each_qa, llm_mode, model_name, max_retries)
+def llm_inf_all(llm, each_qa, llm_mode, model_name, max_retries=5,
+                disable_refusal_handling=False,
+                disable_postprocess=False,
+                disable_dc_fallback=False,
+                icl_ass_prompt_override=None):
+    return llm_inf_with_retry(llm, each_qa, llm_mode, model_name, max_retries,
+                              disable_refusal_handling=disable_refusal_handling,
+                              disable_postprocess=disable_postprocess,
+                              disable_dc_fallback=disable_dc_fallback,
+                              icl_ass_prompt_override=icl_ass_prompt_override)

@@ -74,6 +74,17 @@ def main():
                         help="禁用 wandb，本地调试时使用")
     parser.add_argument("--run_tag", type=str, default="",
                         help="实验标签，用于区分不同实验的输出文件，例如 baseline_full / improved_pilot250")
+
+    # ==================== Ablation 开关（默认全开，行为等价 full improved） ====================
+    parser.add_argument("--disable_refusal_handling", action="store_true",
+                        help="Ablation: 关闭 refusal handling（不再把 is_refusal 作为 DC fallback 的触发条件）")
+    parser.add_argument("--disable_postprocess", action="store_true",
+                        help="Ablation: 关闭 postprocess_output，不再从自由文本恢复 ans 行")
+    parser.add_argument("--disable_dc_fallback", action="store_true",
+                        help="Ablation: 关闭 DC fallback 第二轮兜底路径")
+    parser.add_argument("--use_baseline_prompts", action="store_true",
+                        help="Ablation: 把 icl_cot_prompt / icl_ass_prompt / dc_query 回退为 main 分支 baseline 文本")
+    # ==========================================================================================
     # ==================================================
 
     args = parser.parse_args()
@@ -124,13 +135,26 @@ def main():
     # Inject dc_fallback_prompt for DC mode
     from prompts import dc_fallback_prompt
 
+    # ==================== Ablation: baseline prompts override ====================
+    # Swap the 3 improved prompt pieces (icl_cot_prompt, icl_ass_prompt, dc_query)
+    # back to their main-branch baseline versions. icl_sys_prompt and icl_user_prompt
+    # are unchanged between main and xiaorong, so no override is needed for them.
+    icl_ass_override = None   # None -> keep module-level (improved) icl_ass_prompt
+    dc_query_text = dc_fallback_prompt
+    if args.use_baseline_prompts:
+        from prompts import baseline_icl_cot_prompt, baseline_icl_ass_prompt
+        cot_prompt = baseline_icl_cot_prompt          # reverts icl_cot_prompt -> cot_query
+        icl_ass_override = baseline_icl_ass_prompt    # reverts the ICL assistant turn
+        dc_query_text = baseline_icl_cot_prompt       # baseline fallback reused cot_query
+    # =============================================================================
+
     print("Generating prompts...")
     data = get_prompts_for_data(data, prompt_mode, sys_prompt, cot_prompt, thres)
 
-    # Attach dc_fallback_prompt to each sample for DC fallback use
+    # Attach dc_fallback_prompt (or its baseline substitute) to each sample for DC fallback use
     if 'dc' in llm_mode:
         for each_qa in data:
-            each_qa['dc_query'] = dc_fallback_prompt
+            each_qa['dc_query'] = dc_query_text
 
     # ==================== pilot 控制 ====================
     if args.pilot > 0:
@@ -148,7 +172,13 @@ def main():
     else:
         with open(raw_pred_file_path, "a") as pred_file:
             for idx, each_qa in enumerate(tqdm(data[start_idx:], initial=start_idx, total=len(data))):
-                res = llm_inf_all(llm, each_qa, llm_mode, model_name)
+                res = llm_inf_all(
+                    llm, each_qa, llm_mode, model_name,
+                    disable_refusal_handling=args.disable_refusal_handling,
+                    disable_postprocess=args.disable_postprocess,
+                    disable_dc_fallback=args.disable_dc_fallback,
+                    icl_ass_prompt_override=icl_ass_override,
+                )
 
                 del each_qa["graph"], each_qa["good_paths_rog"], each_qa["good_triplets_rog"], each_qa["scored_triplets"]
 

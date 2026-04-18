@@ -193,3 +193,32 @@ noevi_cot_prompt = (
 #    'Otherwise, return the most possible answers, each prefixed with "ans:".'
 
 )
+
+
+# ============================================================
+# Ablation: baseline (main-branch) versions of icl_cot_prompt and
+# icl_ass_prompt. Used only when --use_baseline_prompts is set.
+# Content matches the prompts on the `main` branch exactly.
+# ============================================================
+
+baseline_icl_cot_prompt = (
+    "Let's think step by step."
+    ' Return the most possible answers based on the given triplets by listing each answer on a separate line, starting with the prefix "ans:".'
+    ' Otherwise, if there is no sufficient information to answer the question, return "ans: not available".'
+)
+
+baseline_icl_ass_prompt = """To find the year the team with mascot named Lou Seal won the World Series, we need to find the team with mascot named Lou Seal and then find the year they won the World Series.
+
+From the triplets, we can see that Lou Seal is the mascot of the San Francisco Giants.
+
+Now, we need to find the year the San Francisco Giants won the World Series.
+
+From the triplets, we can see that San Francisco Giants won the 2010 World Series and 2012 World Series and 2014 World Series.
+
+So, the team with mascot named Lou Seal (San Francisco Giants) won the World Series in 2010, 2012, and 2014.
+
+Therefore, the formatted answers are:
+
+ans: 2014 (2014 World Series)
+ans: 2012 (2012 World Series)
+ans: 2010 (2010 World Series)"""
