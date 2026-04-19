@@ -172,17 +172,33 @@ def main():
     else:
         with open(raw_pred_file_path, "a") as pred_file:
             for idx, each_qa in enumerate(tqdm(data[start_idx:], initial=start_idx, total=len(data))):
-                res = llm_inf_all(
-                    llm, each_qa, llm_mode, model_name,
-                    disable_refusal_handling=args.disable_refusal_handling,
-                    disable_postprocess=args.disable_postprocess,
-                    disable_dc_fallback=args.disable_dc_fallback,
-                    icl_ass_prompt_override=icl_ass_override,
-                )
+                sample_error = None
+                try:
+                    res = llm_inf_all(
+                        llm, each_qa, llm_mode, model_name,
+                        disable_refusal_handling=args.disable_refusal_handling,
+                        disable_postprocess=args.disable_postprocess,
+                        disable_dc_fallback=args.disable_dc_fallback,
+                        icl_ass_prompt_override=icl_ass_override,
+                    )
+                except KeyboardInterrupt:
+                    raise
+                except Exception as e:
+                    # Per-sample fault tolerance: record error, write placeholder,
+                    # persist to checkpoint so resume skips past this sample, continue.
+                    err_type = type(e).__name__
+                    err_msg = str(e)
+                    sample_id = each_qa.get("id", f"idx_{start_idx + idx}")
+                    print(f"[WARN] sample {sample_id} skipped due to {err_type}: {err_msg[:300]}")
+                    res = [""]
+                    sample_error = {"type": err_type, "message": err_msg}
 
-                del each_qa["graph"], each_qa["good_paths_rog"], each_qa["good_triplets_rog"], each_qa["scored_triplets"]
+                for _k in ("graph", "good_paths_rog", "good_triplets_rog", "scored_triplets"):
+                    each_qa.pop(_k, None)
 
                 each_qa["prediction"] = res[0]
+                if sample_error is not None:
+                    each_qa["error"] = sample_error
                 save_checkpoint(pred_file, each_qa)
 
     final_pred_file_path = raw_pred_file_path.with_name(
