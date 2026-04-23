@@ -8,7 +8,7 @@ from pathlib import Path
 
 from preprocess.prepare_data import get_data
 from preprocess.prepare_prompts import get_prompts_for_data
-from llm_utils import llm_init, llm_inf_all
+from llm_utils import llm_init, llm_inf_all, llm_inf_all_baseline
 
 
 def get_defined_prompts(prompt_mode, model_name, llm_mode):
@@ -87,7 +87,58 @@ def main():
     # ==========================================================================================
     # ==================================================
 
+    # ==================== 新增：3 个受控 answer-stage baseline ====================
+    # 这三个开关互斥，且不能与任何 --disable_* / --use_baseline_prompts 混用，
+    # 以保证实验边界清晰。默认全部关闭 -> 现有流程完全不变。
+    parser.add_argument("--enable_prompt_only_baseline", action="store_true",
+                        help="Baseline: Prompt-only. 只保留 improved prompting; "
+                             "自动关闭 DC fallback / refusal handling / postprocess。")
+    parser.add_argument("--enable_retry_once_baseline", action="store_true",
+                        help="Baseline: Retry-once. 正常回答一次; 若是 refusal/NA/空答, "
+                             "仅简单重试一次, 不走 DC fallback, 不递归, 不启用 improved refusal handling 全链路。")
+    parser.add_argument("--enable_answer_then_verify_baseline", action="store_true",
+                        help="Baseline: Answer-then-Verify. 先生成候选答案, "
+                             "再基于 question+triplets+候选 做一次轻量验证, 可保留/修正/拒答。")
+    # =============================================================================
+
     args = parser.parse_args()
+
+    # ==================== 新 baseline 的互斥与安全性检查 ====================
+    # 规则：
+    #   (1) 3 个 --enable_*_baseline 彼此互斥
+    #   (2) 任意 --enable_*_baseline 启用时, 不允许同时启用任何原 ablation / baseline prompts,
+    #       以避免新老机制在同一次实验里混搭, 造成语义不清.
+    baseline_flags = {
+        "prompt_only": args.enable_prompt_only_baseline,
+        "retry_once": args.enable_retry_once_baseline,
+        "answer_then_verify": args.enable_answer_then_verify_baseline,
+    }
+    enabled_baselines = [name for name, on in baseline_flags.items() if on]
+    if len(enabled_baselines) > 1:
+        parser.error(
+            "The new baseline switches are mutually exclusive; "
+            f"cannot enable more than one at the same time, got: {enabled_baselines}"
+        )
+
+    baseline_mode = enabled_baselines[0] if enabled_baselines else None
+    if baseline_mode is not None:
+        conflicting = []
+        if args.disable_refusal_handling:
+            conflicting.append("--disable_refusal_handling")
+        if args.disable_postprocess:
+            conflicting.append("--disable_postprocess")
+        if args.disable_dc_fallback:
+            conflicting.append("--disable_dc_fallback")
+        if args.use_baseline_prompts:
+            conflicting.append("--use_baseline_prompts")
+        if conflicting:
+            parser.error(
+                f"--enable_{baseline_mode}_baseline cannot be combined with any of: "
+                f"{', '.join(conflicting)}. "
+                "New baselines must not silently mix with existing ablation switches."
+            )
+    # =====================================================================
+
     dataset_name = args.dataset_name
     prompt_mode = args.prompt_mode
     llm_mode = args.llm_mode
@@ -122,6 +173,15 @@ def main():
         score_dict_path = args.score_dict_path
 
     run_tag = args.run_tag.strip()
+    # Auto-append a short marker when a new baseline is active so result files
+    # and logs can be unambiguously identified.
+    if baseline_mode is not None:
+        marker = {
+            "prompt_only": "pronly",
+            "retry_once": "retry1",
+            "answer_then_verify": "verify",
+        }[baseline_mode]
+        run_tag = f"{run_tag}-{marker}" if run_tag else marker
     tag_suffix = f"-{run_tag}" if run_tag else ""
 
     raw_pred_folder_path = Path(f"./results/KGQA/{dataset_name}/SubgraphRAG/{args.model_name.split('/')[-1]}")
@@ -174,13 +234,20 @@ def main():
             for idx, each_qa in enumerate(tqdm(data[start_idx:], initial=start_idx, total=len(data))):
                 sample_error = None
                 try:
-                    res = llm_inf_all(
-                        llm, each_qa, llm_mode, model_name,
-                        disable_refusal_handling=args.disable_refusal_handling,
-                        disable_postprocess=args.disable_postprocess,
-                        disable_dc_fallback=args.disable_dc_fallback,
-                        icl_ass_prompt_override=icl_ass_override,
-                    )
+                    if baseline_mode is not None:
+                        res = llm_inf_all_baseline(
+                            llm, each_qa, llm_mode, model_name,
+                            baseline_mode=baseline_mode,
+                            icl_ass_prompt_override=icl_ass_override,
+                        )
+                    else:
+                        res = llm_inf_all(
+                            llm, each_qa, llm_mode, model_name,
+                            disable_refusal_handling=args.disable_refusal_handling,
+                            disable_postprocess=args.disable_postprocess,
+                            disable_dc_fallback=args.disable_dc_fallback,
+                            icl_ass_prompt_override=icl_ass_override,
+                        )
                 except KeyboardInterrupt:
                     raise
                 except Exception as e:
@@ -214,11 +281,12 @@ def main():
 
     print("=" * 50)
     print(f"[RUN INFO]")
-    print(f"  run_tag:     {run_tag if run_tag else '<none>'}")
-    print(f"  mode:        {pilot_label}")
-    print(f"  dataset:     {dataset_name}")
-    print(f"  total:       {len(data)}")
-    print(f"  output:      {final_pred_file_path}")
+    print(f"  run_tag:       {run_tag if run_tag else '<none>'}")
+    print(f"  mode:          {pilot_label}")
+    print(f"  dataset:       {dataset_name}")
+    print(f"  total:         {len(data)}")
+    print(f"  baseline_mode: {baseline_mode if baseline_mode else '<none (standard pipeline)>'}")
+    print(f"  output:        {final_pred_file_path}")
     print("=" * 50)
     print(f"Evaluate with:")
     print(f"  python reason/eval_standalone.py --pred_file {final_pred_file_path} --eval_mode strict")

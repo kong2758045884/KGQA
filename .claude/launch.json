@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "pv-dashboard",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["-e", "setInterval(()=>{},1000)"],
+      "port": 5180
+    }
+  ]
+}

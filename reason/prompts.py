@@ -222,3 +222,30 @@ Therefore, the formatted answers are:
 ans: 2014 (2014 World Series)
 ans: 2012 (2012 World Series)
 ans: 2010 (2010 World Series)"""
+
+
+# ============================================================
+# Answer-then-Verify baseline prompts.
+# Used ONLY when --enable_answer_then_verify_baseline is set.
+# The verifier inspects the question + triplets + candidate answer
+# and can: (1) keep the candidate, (2) correct it, or (3) mark as
+# "ans: not available" when the triplets do not support any answer.
+# Intentionally lightweight: no ICL shots, no multi-round dialogue.
+# ============================================================
+
+answer_verify_sys_prompt = (
+    "You are a verifier for knowledge-graph question answering. "
+    "Given a question, the supporting triplets, and a candidate answer, "
+    "decide whether to KEEP the candidate, CORRECT it using only the triplets, "
+    "or mark it as NO ANSWER when the triplets do not support any answer. "
+    "Do not use external knowledge beyond what the triplets provide."
+)
+
+answer_verify_instruction = (
+    "Verify the candidate answer against the triplets above.\n"
+    "- If the candidate is supported by the triplets, keep it as-is.\n"
+    "- If the candidate is wrong or incomplete, output the correct answer(s) using only the triplets.\n"
+    '- If the triplets do not support any answer, output a single line "ans: not available".\n'
+    'Return the final answer(s) as one or more lines, each starting with the prefix "ans:". '
+    "Do not include explanations or reasoning in the final output."
+)
